@@ -8,6 +8,7 @@ from sklearn.decomposition import TruncatedSVD
 from sklearn.metrics.pairwise import cosine_similarity
 import plotly.express as px
 nltk.download('punkt_tab')
+
 import nltk
 import os
 from nltk.corpus import stopwords
@@ -133,7 +134,7 @@ def recommend_schemes_improved(df, vectorizer, svd, latent_matrix, latent_sim, q
 
 
 # --- STREAMLIT UI ---
-st.set_page_config(page_title="Gov Scheme Recommender", layout="centered")
+st.set_page_config(page_title="Yojana Manthan", layout="centered")
 st.title("🌐 Government Scheme Recommender System")
 with st.expander("ℹ️ How does this work?"):
     st.write("""
