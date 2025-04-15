@@ -16,6 +16,8 @@ import tempfile
 import os
 import qrcode
 from PIL import Image
+import nltk
+nltk.download('punkt_tab')
 
 # --- Safe downloads: check if already downloaded ---
 def download_nltk_resource(resource):
