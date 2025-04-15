@@ -69,9 +69,22 @@ def load_and_process_data():
 def recommend_schemes_improved(df, vectorizer, svd, latent_matrix, latent_sim, query, top_n=5, method="hybrid"):
     method = method.lower()
     
-    if method == "exact" and query in df["Scheme Name"].values:
-        idx = df[df["Scheme Name"] == query].index[0]
-        similarity_scores = list(enumerate(latent_sim[idx]))
+    if method == "exact":
+        matched_rows = df[df["Scheme Name"].str.lower() == query.lower()]
+        if matched_rows.empty:
+            return "No exact match found for the given scheme name."
+        
+        recommendations = []
+        for _, scheme in matched_rows.iterrows():
+            recommendations.append({
+                "Scheme Name": scheme["Scheme Name"],
+                "Details": scheme["Details"],
+                "Similarity Score": 1.0,
+                "State": scheme["State"],
+                "Category": scheme["Category"],
+                "Apply Link": scheme["Apply Link"] if "Apply Link" in df.columns else "N/A"
+            })
+        return recommendations
 
     elif method in ["content", "hybrid"]:
         processed_query = enhanced_preprocess_text(query)
@@ -90,7 +103,7 @@ def recommend_schemes_improved(df, vectorizer, svd, latent_matrix, latent_sim, q
     else:
         return "Invalid method. Use 'exact', 'content', or 'hybrid'."
 
-    if query in df["Scheme Name"].values:
+    if query in df["Scheme Name"].values and method != "exact":
         idx = df[df["Scheme Name"] == query].index[0]
         similarity_scores = [score for score in similarity_scores if score[0] != idx]
 
@@ -119,6 +132,7 @@ def recommend_schemes_improved(df, vectorizer, svd, latent_matrix, latent_sim, q
         return "No matching schemes found. Try adjusting the query or method."
 
     return recommendations
+
 
 # --- PDF GENERATION FUNCTION ---
 # --- PDF GENERATION FUNCTION ---
@@ -182,7 +196,7 @@ with st.expander("ℹ️ How does this work?"):
     - **Exact Match**: Finds schemes with names matching your input.
     - **Content-Based**: Matches schemes with similar descriptions.
 
-    You can view the results, check apply links, scan QR codes, and download a PDF report.
+    You can view the results, check apply links, and download a PDF report of your eligible schemes.
     """)
 
 df, vectorizer, svd, latent_matrix, latent_sim = load_and_process_data()
@@ -193,15 +207,23 @@ with st.sidebar:
         st.subheader("Available Schemes")
         st.dataframe(df[["Scheme Name", "Category", "State", "Apply Link"]], use_container_width=True)
 
-st.header("📝 Enter Your Details")
-gender = st.selectbox("Gender", ["Male", "Female", "Other"])
-age = st.slider("Age", 18, 100, 25)
-income = st.selectbox("Monthly Income Range", ["< ₹10,000", "₹10,000 - ₹30,000", "₹30,001 - ₹50,000", "> ₹50,000"])
-employment = st.selectbox("Employment Status", ["Unemployed", "Self-employed", "Salaried", "Student"])
-education = st.selectbox("Education Level", ["No formal education", "Primary", "Secondary", "Graduate", "Postgraduate"])
-location = st.text_input("State/Region")
-keywords = st.text_area("Enter Interests or Keywords (e.g., agriculture, women empowerment, education)", height=100)
-method = st.radio("Recommendation Method", ["Hybrid", "Exact Match", "Content-Based"], horizontal=True)
+st.header("📝 Fill Your Profile for Scheme Recommendations")
+
+col1, col2 = st.columns(2)
+with col1:
+    gender = st.selectbox("👤 Gender", ["Male", "Female", "Other"])
+    income = st.selectbox("💰 Monthly Income", ["< ₹10,000", "₹10,000 - ₹30,000", "₹30,001 - ₹50,000", "> ₹50,000"])
+    education = st.selectbox("🎓 Education Level", ["No formal education", "Primary", "Secondary", "Graduate", "Postgraduate"])
+
+with col2:
+    age = st.slider("🎂 Age", 18, 100, 25)
+    employment = st.selectbox("💼 Employment Status", ["Unemployed", "Self-employed", "Salaried", "Student"])
+    location = st.text_input("📍 State/Region")
+
+keywords = st.text_area("🧠 Your Interests or Keywords", placeholder="e.g., agriculture, women empowerment, education", height=100)
+
+method = st.radio("🔎 Choose Recommendation Method", ["Hybrid", "Exact Match", "Content-Based"], horizontal=True)
+
 
 method_map = {
     "Hybrid": "hybrid",
@@ -210,12 +232,17 @@ method_map = {
 }
 method_code = method_map[method]
 
-if st.button("🔍 Recommend Schemes"):
+if st.button("🚀 Recommend Schemes"):
     if not keywords.strip():
-        st.warning("Please enter at least one keyword or interest.")
+        st.warning("❗ Please enter at least one keyword.")
     else:
-        with st.spinner("Finding best matching schemes..."):
-            results = recommend_schemes_improved(df, vectorizer, svd, latent_matrix, latent_sim, keywords, method=method_code)
+        with st.spinner("Analyzing your profile and matching with schemes..."):
+            method_map = {
+                "Hybrid": "hybrid",
+                "Exact Match": "exact",
+                "Content-Based": "content"
+            }
+            method_code = method_map[method]
 
             user_profile = {
                 "gender": gender,
@@ -227,17 +254,21 @@ if st.button("🔍 Recommend Schemes"):
                 "keywords": keywords
             }
 
+            results = recommend_schemes_improved(df, vectorizer, svd, latent_matrix, latent_sim, keywords, method=method_code)
+
+        
+
             if isinstance(results, str):
                 st.error(results)
             elif results:
-                st.success("✅ Top Scheme Recommendations")
-                for r in results:
-                    st.subheader(r["Scheme Name"])
-                    st.markdown(f"**Category**: {r['Category']}")
-                    st.markdown(f"**State**: {r['State']}")
-                    st.markdown(f"**Details**: {r['Details']}")
-                    st.markdown(f"**Apply Link**: [Click here]({r['Apply Link']})")
-                    st.markdown("---")
+                st.success("✅ Top Government Scheme Recommendations Based on Your Profile")
+
+                for idx, r in enumerate(results, 1):
+                    with st.expander(f"📌 {idx}. {r['Scheme Name']}"):
+                        st.markdown(f"**🗂️ Category**: `{r['Category']}`")
+                        st.markdown(f"**📍 State**: `{r['State']}`")
+                        st.markdown(f"**ℹ️ Details**:\n{r['Details']}")
+                        st.markdown(f"**🔗 Apply Link**: [Click here]({r['Apply Link']})")
 
                 # PDF Download
                 pdf_path = generate_pdf(results, user_profile)
@@ -249,17 +280,17 @@ if st.button("🔍 Recommend Schemes"):
                         mime="application/pdf"
                     )
 
-                # Sidebar Plot
+                # Chart in sidebar
                 with st.sidebar:
-                    st.subheader("📊 Similarity Scores")
+                    st.markdown("### 📊 Similarity Score Chart")
                     chart_df = pd.DataFrame({
-                        "Full Scheme Name": [r["Scheme Name"] for r in results],
                         "Scheme": [r["Scheme Name"][:30] + "..." if len(r["Scheme Name"]) > 30 else r["Scheme Name"] for r in results],
+                        "Full Name": [r["Scheme Name"] for r in results],
                         "Similarity Score": [r["Similarity Score"] for r in results]
                     })
                     max_score = max(chart_df["Similarity Score"])
                     chart_df["Color"] = chart_df["Similarity Score"].apply(
-                        lambda x: "crimson" if x == max_score else "steelblue"
+                        lambda x: "crimson" if x == max_score else "royalblue"
                     )
                     fig = px.bar(
                         chart_df,
@@ -268,13 +299,14 @@ if st.button("🔍 Recommend Schemes"):
                         orientation="h",
                         color="Color",
                         color_discrete_map="identity",
-                        hover_data={"Full Scheme Name": True, "Similarity Score": True, "Scheme": False, "Color": False},
+                        hover_data={"Full Name": True, "Similarity Score": True, "Color": False},
                         height=300 + 30 * len(chart_df)
                     )
                     fig.update_layout(showlegend=False, margin=dict(l=0, r=0, t=20, b=20))
                     st.plotly_chart(fig, use_container_width=True)
             else:
-                st.warning("No schemes matched your query.")
+                st.warning("No matching schemes found.")
+
 
 st.markdown("---")
 st.caption("🔍 Powered by an NLP-enhanced hybrid recommendation engine.")
