@@ -3,20 +3,19 @@ import pandas as pd
 import re
 import nltk
 from nltk.corpus import stopwords
+from nltk.data import find
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import TruncatedSVD
 from sklearn.metrics.pairwise import cosine_similarity
 import plotly.express as px
-nltk.download('punkt_tab')
-
-import nltk
-import os
-from nltk.corpus import stopwords
-from nltk.data import find
+from fpdf import FPDF
+import tempfile
 
 from fpdf import FPDF
-import qrcode
 import tempfile
+import os
+import qrcode
+from PIL import Image
 
 # --- Safe downloads: check if already downloaded ---
 def download_nltk_resource(resource):
@@ -25,15 +24,12 @@ def download_nltk_resource(resource):
     except LookupError:
         nltk.download(resource.split('/')[-1], quiet=True)
 
-# Download needed resources safely
 download_nltk_resource('tokenizers/punkt')
 download_nltk_resource('corpora/stopwords')
 download_nltk_resource('corpora/wordnet')
 
-# Now use them
 stop_words = set(stopwords.words('english'))
 lemmatizer = nltk.stem.WordNetLemmatizer()
-
 
 # --- TEXT PREPROCESSING ---
 def enhanced_preprocess_text(text):
@@ -47,9 +43,6 @@ def enhanced_preprocess_text(text):
     bigram_phrases = [f"{b[0]}_{b[1]}" for b in bigrams]
     final_tokens = tokens + bigram_phrases
     return " ".join(final_tokens)
-
-
-
 
 # --- LOAD & PROCESS DATA ---
 @st.cache_resource
@@ -97,15 +90,12 @@ def recommend_schemes_improved(df, vectorizer, svd, latent_matrix, latent_sim, q
     else:
         return "Invalid method. Use 'exact', 'content', or 'hybrid'."
 
-    # Remove the query itself if it's an exact match
     if query in df["Scheme Name"].values:
         idx = df[df["Scheme Name"] == query].index[0]
         similarity_scores = [score for score in similarity_scores if score[0] != idx]
 
-    # Sort scores
     similarity_scores = sorted(similarity_scores, key=lambda x: x[1], reverse=True)
 
-    # Filter top N with distinct scheme names
     recommendations = []
     seen_names = set()
 
@@ -130,7 +120,55 @@ def recommend_schemes_improved(df, vectorizer, svd, latent_matrix, latent_sim, q
 
     return recommendations
 
+# --- PDF GENERATION FUNCTION ---
+# --- PDF GENERATION FUNCTION ---
+from fpdf import FPDF
+import tempfile
+import os
 
+class UnicodePDF(FPDF):
+    def __init__(self):
+        super().__init__()
+        self.add_font('Noto', '', 'fonts/NotoSansDevanagari-Regular.ttf', uni=True)
+        self.set_font('Noto', '', 12)
+
+def generate_pdf(recommendations, user_profile):
+    def clean_text(text):
+        return str(text).replace("₹", "Rs.")
+
+    pdf = UnicodePDF()
+    pdf.add_page()
+    pdf.set_font("Noto", size=16)
+    pdf.cell(0, 10, "Government Scheme Recommendations", ln=True, align="C")
+
+    pdf.set_font("Noto", size=12)
+    pdf.ln(10)
+    pdf.multi_cell(0, 10, f"""User Profile:
+Gender: {user_profile['gender']}
+Age: {user_profile['age']}
+Income: {clean_text(user_profile['income'])}
+Employment: {user_profile['employment']}
+Education: {user_profile['education']}
+Location: {user_profile['location']}
+Keywords: {user_profile['keywords']}
+""")
+
+    pdf.ln(5)
+    for idx, r in enumerate(recommendations, 1):
+        pdf.set_font("Noto", size=14)
+        pdf.cell(0, 10, f"{idx}. {clean_text(r['Scheme Name'])}", ln=True)
+
+        pdf.set_font("Noto", size=11)
+        pdf.multi_cell(0, 8, f"""Category: {clean_text(r['Category'])}
+State: {clean_text(r['State'])}
+Details: {clean_text(r['Details'])}
+Apply Link: {clean_text(r['Apply Link'])}
+""")
+        pdf.ln(3)
+
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    pdf.output(temp_file.name)
+    return temp_file.name
 
 
 # --- STREAMLIT UI ---
@@ -149,18 +187,13 @@ with st.expander("ℹ️ How does this work?"):
 
 df, vectorizer, svd, latent_matrix, latent_sim = load_and_process_data()
 
-# --- Sidebar: View All Schemes ---
 with st.sidebar:
     st.markdown("---")
     if st.checkbox("📚 Show all available schemes"):
         st.subheader("Available Schemes")
         st.dataframe(df[["Scheme Name", "Category", "State", "Apply Link"]], use_container_width=True)
 
-
-
 st.header("📝 Enter Your Details")
-
-
 gender = st.selectbox("Gender", ["Male", "Female", "Other"])
 age = st.slider("Age", 18, 100, 25)
 income = st.selectbox("Monthly Income Range", ["< ₹10,000", "₹10,000 - ₹30,000", "₹30,001 - ₹50,000", "> ₹50,000"])
@@ -170,7 +203,6 @@ location = st.text_input("State/Region")
 keywords = st.text_area("Enter Interests or Keywords (e.g., agriculture, women empowerment, education)", height=100)
 method = st.radio("Recommendation Method", ["Hybrid", "Exact Match", "Content-Based"], horizontal=True)
 
-# ✅ Method mapping fix
 method_map = {
     "Hybrid": "hybrid",
     "Exact Match": "exact",
@@ -178,60 +210,71 @@ method_map = {
 }
 method_code = method_map[method]
 
-# --- Recommend ---
 if st.button("🔍 Recommend Schemes"):
-    with st.spinner("Finding best matching schemes..."):
-        results = recommend_schemes_improved(df, vectorizer, svd, latent_matrix, latent_sim, keywords, method=method_code)
+    if not keywords.strip():
+        st.warning("Please enter at least one keyword or interest.")
+    else:
+        with st.spinner("Finding best matching schemes..."):
+            results = recommend_schemes_improved(df, vectorizer, svd, latent_matrix, latent_sim, keywords, method=method_code)
 
-        if isinstance(results, str):
-            st.error(results)
-        elif results:
-            st.success("✅ Top Scheme Recommendations")
-            for r in results:
-                st.subheader(r["Scheme Name"])
-                st.markdown(f"**Category**: {r['Category']}")
-                st.markdown(f"**State**: {r['State']}")
-                st.markdown(f"**Details**: {r['Details']}")
-                st.markdown(f"**Apply Link**: [Click here]({r['Apply Link']})")
-                st.markdown("---")
+            user_profile = {
+                "gender": gender,
+                "age": age,
+                "income": income,
+                "employment": employment,
+                "education": education,
+                "location": location,
+                "keywords": keywords
+            }
 
-            # --- Enhanced Sidebar Plot ---
-            with st.sidebar:
-                st.subheader("📊 Similarity Scores")
+            if isinstance(results, str):
+                st.error(results)
+            elif results:
+                st.success("✅ Top Scheme Recommendations")
+                for r in results:
+                    st.subheader(r["Scheme Name"])
+                    st.markdown(f"**Category**: {r['Category']}")
+                    st.markdown(f"**State**: {r['State']}")
+                    st.markdown(f"**Details**: {r['Details']}")
+                    st.markdown(f"**Apply Link**: [Click here]({r['Apply Link']})")
+                    st.markdown("---")
 
-                chart_df = pd.DataFrame({
-                    "Full Scheme Name": [r["Scheme Name"] for r in results],
-                    "Scheme": [r["Scheme Name"][:30] + "..." if len(r["Scheme Name"]) > 30 else r["Scheme Name"] for r in results],
-                    "Similarity Score": [r["Similarity Score"] for r in results]
-                })
+                # PDF Download
+                pdf_path = generate_pdf(results, user_profile)
+                with open(pdf_path, "rb") as f:
+                    st.download_button(
+                        label="📄 Download PDF Report",
+                        data=f,
+                        file_name="scheme_recommendations.pdf",
+                        mime="application/pdf"
+                    )
 
-                max_score = max(chart_df["Similarity Score"])
-                chart_df["Color"] = chart_df["Similarity Score"].apply(
-                    lambda x: "crimson" if x == max_score else "steelblue"
-                )
-
-                fig = px.bar(
-                    chart_df,
-                    x="Similarity Score",
-                    y="Scheme",
-                    orientation="h",
-                    color="Color",
-                    color_discrete_map="identity",
-                    hover_data={"Full Scheme Name": True, "Similarity Score": True, "Scheme": False, "Color": False},
-                    height=300 + 30 * len(chart_df)
-                )
-                fig.update_layout(showlegend=False, margin=dict(l=0, r=0, t=20, b=20))
-                st.plotly_chart(fig, use_container_width=True)
-
-                
-
-
-
-        else:
-            st.warning("No schemes matched your query.")
-
-            
-
+                # Sidebar Plot
+                with st.sidebar:
+                    st.subheader("📊 Similarity Scores")
+                    chart_df = pd.DataFrame({
+                        "Full Scheme Name": [r["Scheme Name"] for r in results],
+                        "Scheme": [r["Scheme Name"][:30] + "..." if len(r["Scheme Name"]) > 30 else r["Scheme Name"] for r in results],
+                        "Similarity Score": [r["Similarity Score"] for r in results]
+                    })
+                    max_score = max(chart_df["Similarity Score"])
+                    chart_df["Color"] = chart_df["Similarity Score"].apply(
+                        lambda x: "crimson" if x == max_score else "steelblue"
+                    )
+                    fig = px.bar(
+                        chart_df,
+                        x="Similarity Score",
+                        y="Scheme",
+                        orientation="h",
+                        color="Color",
+                        color_discrete_map="identity",
+                        hover_data={"Full Scheme Name": True, "Similarity Score": True, "Scheme": False, "Color": False},
+                        height=300 + 30 * len(chart_df)
+                    )
+                    fig.update_layout(showlegend=False, margin=dict(l=0, r=0, t=20, b=20))
+                    st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("No schemes matched your query.")
 
 st.markdown("---")
 st.caption("🔍 Powered by an NLP-enhanced hybrid recommendation engine.")
