@@ -22,8 +22,9 @@ To run the application locally:
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/Yash-Bhatnagar-02/Yojana-Manthan.git
-   cd Yojana-Manthan```
+     git clone https://github.com/Yash-Bhatnagar-02/Yojana-Manthan.git
+     cd Yojana-Manthan
+   ```
 
 
 
