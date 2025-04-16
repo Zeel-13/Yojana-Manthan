@@ -7,7 +7,7 @@
 1. Clone the repo:
 ```bash
   git clone https://github.com/Yash-Bhatnagar-02/Yojana-Manthan.git
-cd Yojana-Manthan
+  cd Yojana-Manthan
 
 ```
 
