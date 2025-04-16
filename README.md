@@ -61,7 +61,4 @@ This data is used to match user queries using natural language processing techni
 
 This project is licensed under the MIT License.
 
-You are free to use, modify, and distribute this software as long as the original license and copyright
-notice are included in all copies or substantial portions of the software.
-
 For more details, refer to the [LICENSE](LICENSE) file.
