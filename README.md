@@ -34,7 +34,7 @@ To run the application locally:
 ```bash
   streamlit run app.py
 ```
-```
+
 ## 🛠️ Features
 
 - **Natural Language Querying**: Users can input queries in plain language to find relevant government schemes.
