@@ -44,8 +44,7 @@ To run the application locally:
 - **PDF Report Generation**: Generates downloadable PDF reports of the recommended schemes.
 - **Easy Deployment**: Simple to deploy on Streamlit Cloud or any Python-compatible hosting.
 
-## 📊 Data Source
-
+## 📊 Dataset description
 The system uses a curated CSV dataset (`Gov schemes.csv`) that contains comprehensive information about various Indian government schemes. Each record in the dataset includes:
 
 - **Scheme Name**
